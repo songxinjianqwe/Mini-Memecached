@@ -10,4 +10,8 @@ public class MessageConstant {
     public static String STORED = "STORED";
     public static String DELETED = "DELETED";
     public static String NOT_FOUND = "NOT_FOUND";
+    public static String END = "END";
+    public static String VALUE = "VALUE";
+    public static String LINE_SEPARATOR = "\r\n";
+    public static String BLANK = " ";
 }

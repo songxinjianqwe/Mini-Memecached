@@ -1,4 +1,4 @@
-package com.sinjinsong.memcached.core;
+package com.sinjinsong.memcached.core.server;
 
 import com.sinjinsong.memcached.core.request.RequestDispatcher;
 import lombok.extern.slf4j.Slf4j;
@@ -10,9 +10,12 @@ import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
 import java.nio.channels.SocketChannel;
 import java.util.Iterator;
-import java.util.Scanner;
 
 /**
+ * 服务器主体，监听在8888端口
+ * 基于Java NIO，实现IO多路复用
+ * 支持多个客户端连接
+ *
  * @author sinjinsong
  * @date 2018/4/3
  */
@@ -24,6 +27,9 @@ public class Server {
     private Thread acceptor;
     private RequestDispatcher requestDispatcher;
 
+    /**
+     * 启动服务器
+     */
     public void start() {
         try {
             initServerSocket(DEFAULT_PORT);
@@ -38,20 +44,19 @@ public class Server {
     }
 
     public void await() {
-        Scanner scanner = new Scanner(System.in);
-        while (scanner.hasNext()) {
-            if (scanner.next().equals("QUIT")) {
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            @Override
+            public void run() {
+                log.info("服务器关闭中...");
                 close();
-                System.exit(0);
             }
-        }
+        });
     }
 
     private void initAcceptor() {
         String acceptorName = "Acceptor";
         Acceptor acceptor = new Acceptor(selector, server, requestDispatcher);
         Thread t = new Thread(acceptor, acceptorName);
-        t.setDaemon(true);
         t.start();
         this.acceptor = t;
     }
@@ -70,18 +75,35 @@ public class Server {
 
     public void close() {
         try {
-            acceptor.interrupt();
-            requestDispatcher.close();
-            selector.close();
-            server.close();
+            if (acceptor != null) {
+                acceptor.interrupt();
+            }
+            if (requestDispatcher != null) {
+                requestDispatcher.close();
+            }
+            if (selector != null) {
+                selector.close();
+            }
+            if (server != null) {
+                server.close();
+            }
         } catch (IOException e) {
             e.printStackTrace();
         }
     }
 
-    public void closeClient(SocketChannel socketChannel){
-         socketChannel.keyFor(selector).cancel();
+    /**
+     * 将客户端从selector中移除
+     *
+     * @param socketChannel
+     */
+    public void unregisterClient(SocketChannel socketChannel) {
+        socketChannel.keyFor(selector).cancel();
     }
+
+    /**
+     * 客户端连接与读事件就绪的处理器
+     */
     private static class Acceptor implements Runnable {
         private Selector selector;
         private ServerSocketChannel server;
@@ -92,7 +114,7 @@ public class Server {
             this.server = server;
             this.requestDispatcher = requestDispatcher;
         }
-        
+
         @Override
         public void run() {
             try {
@@ -115,9 +137,8 @@ public class Server {
                             SocketChannel socketChannel = (SocketChannel) key.channel();
                             log.info("服务器连接客户端读事件就绪");
                             log.info("客户端为:{}", socketChannel.getRemoteAddress());
-                            requestDispatcher.execute(socketChannel);
+                            requestDispatcher.dispatch(socketChannel);
                         }
-                        //处理完毕后，需要取消当前的选择键
                         it.remove();
                     }
                 }

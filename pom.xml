@@ -43,7 +43,7 @@
 
 
     <build>
-        <finalName>Mini-Memcached</finalName>
+        <finalName>mini-memcached</finalName>
         <plugins>
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
