@@ -30,7 +30,7 @@ CommandExecutor会获得单例CacheManager的引用，然后遍历所有的Comma
 然后执行 ./run.sh start ，如果启动成功，将显示mini-memecached server started
 该服务器会监听在8888端口上，客户端使用telnet localhost 8888来连接服务器。
 
-测试用例1
+### 测试用例1
 ![test_case1](http://markdown-1252651195.cossh.myqcloud.com/%E6%B5%8B%E8%AF%95%E7%94%A8%E4%BE%8B.png)
 
 cd /home/memcached
@@ -53,7 +53,7 @@ cd /home/memcached
 
 ./run.sh stop
 
-测试用例2
+### 测试用例2
 ![test_cast2](http://markdown-1252651195.cossh.myqcloud.com/%E6%B5%8B%E8%AF%95%E7%94%A8%E4%BE%8B2.png)
 
 cd /home/memcached
