@@ -2,7 +2,7 @@ package com.sinjinsong.memcached.core.command.impl;
 
 import com.sinjinsong.memcached.core.cache.CacheManager;
 import com.sinjinsong.memcached.core.command.Command;
-import com.sinjinsong.memcached.core.request.RequestHandler;
+import com.sinjinsong.memcached.core.request.Connection;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.sinjinsong.memcached.core.constant.MessageConstant.BLANK;
@@ -17,12 +17,12 @@ import static com.sinjinsong.memcached.core.constant.MessageConstant.NOT_FOUND;
 @Slf4j
 public class DeleteCommand implements Command {
     @Override
-    public boolean supports(String commandLine, RequestHandler requestHandler) {
+    public boolean supports(String commandLine, Connection connection) {
         return commandLine.startsWith("delete");
     }
 
     @Override
-    public String[] execute(String commandLine, CacheManager manager, RequestHandler requestHandler) {
+    public String[] execute(String commandLine, CacheManager manager, Connection connection) {
         try {
             String[] slices = commandLine.split(BLANK);
             String command = slices[0];

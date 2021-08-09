@@ -1,6 +1,8 @@
 package com.sinjinsong.memcached.core.server;
 
-import com.sinjinsong.memcached.core.request.RequestDispatcher;
+import com.sinjinsong.memcached.core.request.RequestExecutor;
+import com.sinjinsong.memcached.core.server.reactor.impl.Acceptor;
+import com.sinjinsong.memcached.core.server.reactor.impl.Poller;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -8,8 +10,7 @@ import java.net.InetSocketAddress;
 import java.nio.channels.SelectionKey;
 import java.nio.channels.Selector;
 import java.nio.channels.ServerSocketChannel;
-import java.nio.channels.SocketChannel;
-import java.util.Iterator;
+import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 服务器主体，监听在8888端口
@@ -22,10 +23,11 @@ import java.util.Iterator;
 @Slf4j
 public class Server {
     private static final int DEFAULT_PORT = 8888;
+    private static final int POLLER_SIZE = Runtime.getRuntime().availableProcessors();
     private ServerSocketChannel server;
-    private Selector selector;
-    private Thread acceptor;
-    private RequestDispatcher requestDispatcher;
+    private Acceptor acceptor;
+    private RequestExecutor requestExecutor;
+    private Poller[] pollers;
 
     /**
      * 启动服务器
@@ -34,11 +36,11 @@ public class Server {
         try {
             initServerSocket(DEFAULT_PORT);
             initRequestDispatcher();
+            initPollers();
             initAcceptor();
             log.info("服务器启动");
         } catch (Exception e) {
-            e.printStackTrace();
-            log.info("初始化服务器失败");
+            log.info("初始化服务器失败", e);
             close();
         }
     }
@@ -53,99 +55,70 @@ public class Server {
         });
     }
 
-    private void initAcceptor() {
-        String acceptorName = "Acceptor";
-        Acceptor acceptor = new Acceptor(selector, server, requestDispatcher);
-        Thread t = new Thread(acceptor, acceptorName);
-        t.start();
-        this.acceptor = t;
-    }
-
     private void initRequestDispatcher() {
-        requestDispatcher = new RequestDispatcher(this);
+        requestExecutor = new RequestExecutor();
     }
 
     private void initServerSocket(int port) throws IOException {
-        selector = Selector.open();
         server = ServerSocketChannel.open();
         server.bind(new InetSocketAddress(port));
         server.configureBlocking(false);
-        server.register(selector, SelectionKey.OP_ACCEPT);
+    }
+
+    private void initPollers() {
+        this.pollers = new Poller[POLLER_SIZE];
+        for (int i = 0; i < POLLER_SIZE; i++) {
+            pollers[i] = new Poller(requestExecutor);
+            pollers[i].init();
+        }
+    }
+
+    private void initAcceptor() {
+        this.acceptor = new Acceptor(this::selectPoller);
+        this.acceptor.init();
+        Selector selector = this.acceptor.getSelector();
+        this.acceptor.submit(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    server.register(selector, SelectionKey.OP_ACCEPT, null);
+                    selector.wakeup();
+                    log.info("register server socket channel to acceptor succeeded");
+                } catch (Throwable t) {
+                    log.error("register failed, caused by:", t);
+                    try {
+                        server.close();
+                        System.exit(1);
+                    } catch (IOException e) {
+                        log.warn("close failed, caused by: ", e);
+                    }
+                }
+            }
+        });
+    }
+
+    public Poller selectPoller() {
+        return pollers[ThreadLocalRandom.current().nextInt(pollers.length)];
     }
 
     public void close() {
         try {
             if (acceptor != null) {
-                acceptor.interrupt();
+                acceptor.close();
             }
-            if (requestDispatcher != null) {
-                requestDispatcher.close();
+            if (pollers != null) {
+                for (Poller poller : pollers) {
+                    poller.close();
+                }
             }
-            if (selector != null) {
-                selector.close();
+            if (requestExecutor != null) {
+                requestExecutor.close();
             }
             if (server != null) {
                 server.close();
             }
-        } catch (IOException e) {
-            e.printStackTrace();
+        } catch (Throwable t) {
+            log.warn("close resources failed, casued by: ", t);
         }
     }
-
-    /**
-     * 将客户端从selector中移除
-     *
-     * @param socketChannel
-     */
-    public void unregisterClient(SocketChannel socketChannel) {
-        socketChannel.keyFor(selector).cancel();
-    }
-
-    /**
-     * 客户端连接与读事件就绪的处理器
-     */
-    private static class Acceptor implements Runnable {
-        private Selector selector;
-        private ServerSocketChannel server;
-        private RequestDispatcher requestDispatcher;
-
-        public Acceptor(Selector selector, ServerSocketChannel server, RequestDispatcher requestDispatcher) {
-            this.selector = selector;
-            this.server = server;
-            this.requestDispatcher = requestDispatcher;
-        }
-
-        @Override
-        public void run() {
-            try {
-                while (!Thread.currentThread().isInterrupted()) {
-                    if (selector.select() <= 0) {
-                        continue;
-                    }
-                    for (Iterator<SelectionKey> it = selector.selectedKeys().iterator(); it.hasNext(); ) {
-                        SelectionKey key = it.next();
-                        //如果"接收"事件已就绪
-                        if (key.isAcceptable()) {
-                            //如果"读取"事件已就绪
-                            //交由读取事件的处理器处理
-                            SocketChannel socketChannel = server.accept();
-                            socketChannel.configureBlocking(false);
-                            socketChannel.register(selector, SelectionKey.OP_READ);
-                            log.info("服务器连接客户端连接");
-                            log.info("客户端为:{}", socketChannel.getRemoteAddress());
-                        } else if (key.isReadable()) {
-                            SocketChannel socketChannel = (SocketChannel) key.channel();
-                            log.info("服务器连接客户端读事件就绪");
-                            log.info("客户端为:{}", socketChannel.getRemoteAddress());
-                            requestDispatcher.dispatch(socketChannel);
-                        }
-                        it.remove();
-                    }
-                }
-            } catch (IOException e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
 }

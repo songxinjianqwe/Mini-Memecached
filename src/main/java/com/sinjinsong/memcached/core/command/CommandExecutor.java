@@ -6,7 +6,7 @@ import com.sinjinsong.memcached.core.command.impl.GetCommand;
 import com.sinjinsong.memcached.core.command.impl.QuitCommand;
 import com.sinjinsong.memcached.core.command.impl.SetCommand;
 import com.sinjinsong.memcached.core.constant.MessageConstant;
-import com.sinjinsong.memcached.core.request.RequestHandler;
+import com.sinjinsong.memcached.core.request.Connection;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
@@ -39,12 +39,12 @@ public class CommandExecutor {
      * @param commandString
      * @return
      */
-    public static String[] execute(RequestHandler requestHandler, String commandString) {
+    public static String[] execute(Connection connection, String commandString) {
         log.info("开始尝试执行命令...");
         CacheManager cacheManager = CacheManager.getInstance();
         for (Command command : chain) {
-            if (command.supports(commandString, requestHandler)) {
-                return command.execute(commandString, cacheManager, requestHandler);
+            if (command.supports(commandString, connection)) {
+                return command.execute(commandString, cacheManager, connection);
             }
         }
         log.info("不支持该指令 {}", commandString);

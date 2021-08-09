@@ -2,7 +2,7 @@ package com.sinjinsong.memcached.core.command.impl;
 
 import com.sinjinsong.memcached.core.cache.CacheManager;
 import com.sinjinsong.memcached.core.command.Command;
-import com.sinjinsong.memcached.core.request.RequestHandler;
+import com.sinjinsong.memcached.core.request.Connection;
 import lombok.extern.slf4j.Slf4j;
 
 import static com.sinjinsong.memcached.core.cache.CacheManager.ValueHolder.NO_EXPIRE;
@@ -19,10 +19,10 @@ import static com.sinjinsong.memcached.core.constant.MessageConstant.STORED;
 public class SetCommand implements Command {
 
     @Override
-    public boolean supports(String commandLine, RequestHandler requestHandler) {
+    public boolean supports(String commandLine, Connection connection) {
         return commandLine.startsWith("set") ||
-                (requestHandler.getLastCommandLine() != null &&
-                        requestHandler.getLastCommandLine().startsWith("set"));
+                (connection.getLastCommandLine() != null &&
+                        connection.getLastCommandLine().startsWith("set"));
     }
 
     /**
@@ -30,16 +30,16 @@ public class SetCommand implements Command {
      *
      * @param commandLine
      * @param manager
-     * @param requestHandler
+     * @param connection
      * @return
      */
     @Override
-    public String[] execute(String commandLine, CacheManager manager, RequestHandler requestHandler) {
-        String lastCommandLine = requestHandler.getLastCommandLine();
+    public String[] execute(String commandLine, CacheManager manager, Connection connection) {
+        String lastCommandLine = connection.getLastCommandLine();
         try {
             if (lastCommandLine == null) {
                 log.info("set命令，等待value数据读取");
-                requestHandler.setLastCommandLine(commandLine);
+                connection.setLastCommandLine(commandLine);
                 return null;
             }
             log.info("set命令,lastCommandLine为{},commandLine为{}", lastCommandLine, commandLine);
@@ -55,9 +55,9 @@ public class SetCommand implements Command {
                             .value(value)
                             .expireTime(expireTime == NO_EXPIRE ? NO_EXPIRE : System.currentTimeMillis() + expireTime * 1000)
                             .flags(flags).build());
-            requestHandler.setLastCommandLine(null);
+            connection.setLastCommandLine(null);
         } catch (Exception e) {
-            requestHandler.setLastCommandLine(null);
+            connection.setLastCommandLine(null);
             e.printStackTrace();
             return new String[]{CLIENT_ERROR};
         }
